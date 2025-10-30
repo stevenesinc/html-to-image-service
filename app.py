@@ -7,13 +7,10 @@ import time
 import io
 from playwright.sync_api import sync_playwright
 from PIL import Image
-
 app = Flask(__name__)
 CORS(app)
-
 # Set Playwright browser path for Render.com
 os.environ['PLAYWRIGHT_BROWSERS_PATH'] = '/ms-playwright'
-
 @app.route("/", methods=["GET"])
 def home():
     return jsonify({
@@ -21,7 +18,6 @@ def home():
         "version": "1.0.0",
         "status": "running"
     })
-
 @app.route("/ping", methods=["POST"])
 def ping():
     data = request.get_json(force=True, silent=True) or {}
@@ -31,7 +27,6 @@ def ping():
         "echo": data,
         "timestamp": time.time()
     })
-
 @app.route("/health", methods=["GET"])
 def health_check():
     return jsonify({
@@ -39,65 +34,51 @@ def health_check():
         "service": "html-to-image",
         "timestamp": time.time()
     })
-
-def html_to_image(html_content, width=1080, height=1350, quality=100):
+def html_to_image(html_content, quality=90):
     temp_html_path = None
     try:
         # Write HTML to temporary file
         with tempfile.NamedTemporaryFile(mode="w", suffix=".html", delete=False, encoding="utf-8") as f:
             f.write(html_content)
             temp_html_path = f.name
-        
         file_url = f"file:///{temp_html_path.replace(os.sep, '/')}"
-        
         with sync_playwright() as p:
             browser = p.chromium.launch(
                 headless=True,
                 args=['--no-sandbox', '--disable-setuid-sandbox']
             )
-            page = browser.new_page(viewport={'width': width, 'height': height})
+            page = browser.new_page()
             page.goto(file_url)
             page.wait_for_load_state("networkidle")
-            
             # Capture full page
             screenshot_bytes = page.screenshot(full_page=True)
             browser.close()
-        
         # Convert PNG → JPG
         img = Image.open(io.BytesIO(screenshot_bytes))
         jpg_buffer = io.BytesIO()
         img.convert("RGB").save(jpg_buffer, format="JPEG", quality=quality)
         jpg_bytes = jpg_buffer.getvalue()
-        
         return {
             "success": True,
             "base64_image": base64.b64encode(jpg_bytes).decode("utf-8"),
             "file_size": len(jpg_bytes)
         }
-        
     except Exception as e:
         import traceback
         print("❌ PLAYWRIGHT ERROR:", traceback.format_exc())
         return {"success": False, "error": str(e)}
-    
     finally:
         if temp_html_path and os.path.exists(temp_html_path):
             os.unlink(temp_html_path)
-
 @app.route("/convert", methods=["POST"])
 def convert_html_to_image():
     data = request.get_json()
-    
     if not data or "html" not in data:
         return jsonify({"success": False, "error": "HTML content is required"}), 400
-    
     result = html_to_image(
         html_content=data["html"],
-        width=data.get("width", 1080),
-        height=data.get("height", 1350),
-        quality=data.get("quality", 100)
+        quality=data.get("quality", 90)
     )
-    
     if result["success"]:
         return jsonify({
             "success": True,
@@ -107,7 +88,6 @@ def convert_html_to_image():
         })
     else:
         return jsonify({"success": False, "error": result["error"]}), 500
-
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     print(f"🚀 Starting HTML → Image Service on port {port}...")
