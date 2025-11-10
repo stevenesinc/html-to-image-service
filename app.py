@@ -40,9 +40,10 @@ def health_check():
         "timestamp": time.time()
     })
 
-def html_to_image(html_content, quality=100, scale=2):  # Add scale parameter
+def html_to_image(html_content, quality=100):
     temp_html_path = None
     try:
+        # Write HTML to temporary file
         with tempfile.NamedTemporaryFile(mode="w", suffix=".html", delete=False, encoding="utf-8") as f:
             f.write(html_content)
             temp_html_path = f.name
@@ -54,10 +55,7 @@ def html_to_image(html_content, quality=100, scale=2):  # Add scale parameter
                 headless=True,
                 args=['--no-sandbox', '--disable-setuid-sandbox']
             )
-            page = browser.new_page(
-                viewport={'width': 1080, 'height': 1350},
-                device_scale_factor=scale  # ADD THIS - 2x or 3x resolution
-            )
+            page = browser.new_page()
             page.goto(file_url)
             page.wait_for_load_state("networkidle")
             
@@ -65,6 +63,7 @@ def html_to_image(html_content, quality=100, scale=2):  # Add scale parameter
             screenshot_bytes = page.screenshot(full_page=True, type='png')
             browser.close()
         
+        # Return PNG directly (no conversion to JPEG)
         return {
             "success": True,
             "base64_image": base64.b64encode(screenshot_bytes).decode("utf-8"),
@@ -88,8 +87,7 @@ def convert_html_to_image():
     
     result = html_to_image(
         html_content=data["html"],
-        quality=data.get("quality", 100),
-        scale=data.get("scale", 2)  # ADD THIS - default 2x
+        quality=data.get("quality", 100)
     )
     
     if result["success"]:
